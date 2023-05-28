@@ -4,7 +4,7 @@ import numpy as np
 Nmol = 11
 nO, nMg, nAl, nSi, nV, nCr, nFe, nCo, nNi, nNb, nTa = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 
 list_major = [nMg, nAl, nSi, nFe, nNi, nCr, nCo]
-list_minor = [nV, nTa, nNb]
+list_minor = [nV,  nNb, nTa]
 
 # O, Mg, Si, V, Fe, Ni, Ta, Nb
 molar_mass = np.array([16, 24.3, 26.98, 28., 50.94, 52., 55.8, 58.9, 58.7, 47.87, 92.9])*1e-3
@@ -25,9 +25,14 @@ def set_initial_mantle_composition_from_element(x_element):
     m_element = r_element/molar_mass[nMg:]
     
     # include oxygen, assuming all elements exist as oxides
+    '''
     m_element_wO = np.array([m_element[0]     + m_element[1]*1.5 + m_element[2]*2 + m_element[3]*1.5 +
                              m_element[4]     + m_element[5]     + m_element[6]   + m_element[7] +
                              m_element[8]*2.5 + m_element[9]*2.5,    # O (assuming Fe+2, Cr+2)
+    '''
+    m_element_wO = np.array([m_element[0]     + m_element[1]*0.  + m_element[2]*2 + m_element[3]*0. +
+                             m_element[4]     + m_element[5]     + m_element[6]   + m_element[7] +
+                             m_element[8]*0.  + m_element[9]*0.,    # O (assuming Fe+2, Cr+2)    
                              m_element[0],    # Mg
                              m_element[1],    # Al
                              m_element[2],    # Si

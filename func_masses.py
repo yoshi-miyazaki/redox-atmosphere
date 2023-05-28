@@ -58,7 +58,7 @@ def mass2shell_width(M, rho, r_in):
 ''' equilibrium conditions (base of magma ocean) '''
 def Peq(g, h):
     # returns P of the base of MO in GPa
-    return rhom * g * h / 1e9
+    return rhom * g * h
 
 
 def Teq(Peq):
@@ -67,7 +67,7 @@ def Teq(Peq):
     Tliq = 1982.1 * (1. + Peq/6.594e9)**(1 / 5.374)
     
     # return T of rheological transition
-    f_rheo = 0.4
+    f_rheo = 0.
     return f_rheo*Tsol + (1-f_rheo)*Tliq
 
 

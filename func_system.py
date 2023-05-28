@@ -13,7 +13,7 @@ R = 8.31446  # universal gas constant
 k = 3.926763924239811e-12 # using Mars' mass-g relationship
 
 # material properties
-rhom = 5000
+rhom = 4000
 rhoc = 8000
 rho_mantle = 3000
 rho_core = 8000
