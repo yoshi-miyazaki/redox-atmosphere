@@ -2,6 +2,9 @@ import sys
 from numba import njit
 from func_chemistry import *
 
+eps = 1e-16
+
+Rubie = 0
 
 # partition coefficients between metal and silicate phases
 @njit
@@ -10,22 +13,40 @@ def calc_Kd(metal, T, P):
     Calculates Kd using constants given 
     in Rubie et al. (2015): Table S1 / Equation (3)
     '''
-    if (metal == "Ni"):
-        a, b, c = 1.06, 1553, -98
-    elif (metal == "V"):
-        a, b, c = -0.48, -5063, 0.
-    elif (metal == "Cr"):
-        a, b, c = -0.17, -2730, 0.
-    elif (metal == "Co"):
-        a, b, c = 0.13, 2057, -57
-    elif (metal == "Ta"):
-        a, b, c = 0.84, -13806, -115
-    elif (metal == "Nb"):
-        a, b, c = 2.66, -14032, -199
-    elif (metal == "FeO"):
-        return 70
+    if (Rubie): # using Rubie et al. (2015)
+        if (metal == "Ni"):
+            a, b, c = 1.06, 1553, -98
+        elif (metal == "V"):
+            a, b, c = -0.48, -5063, 0.
+        elif (metal == "Cr"):
+            a, b, c = -0.17, -2730, 0.
+        elif (metal == "Co"):
+            a, b, c = 0.13, 2057, -57
+        elif (metal == "Ta"):
+            a, b, c = 0.84, -13806, -115
+        elif (metal == "Nb"):
+            a, b, c = 2.66, -14032, -199
+        elif (metal == "FeO"):
+            return 70
+        else:
+            print("calc_Kd: no partition information available for", metal)
     else:
-        print("calc_Kd: no partition information available for", metal)
+        if (metal == "Ni"):
+            a, b, c = 0.46, 2700, -61
+        elif (metal == "V"):
+            a, b, c = -0.3,  -5400, 10.
+        elif (metal == "Cr"):
+            a, b, c = 0.3, -2900, 9.
+        elif (metal == "Co"):
+            a, b, c = 0.36, 1500, -33
+        elif (metal == "Ta"):
+            a, b, c = 0.84, -13806, -115
+        elif (metal == "Nb"):
+            a, b, c = 2.66, -14032, -199
+        elif (metal == "FeO"):
+            return 70
+        else:
+            print("calc_Kd: no partition information available for", metal)
 
     PGPa = P/1e9
     logKd = a + b / T + c * PGPa / T
@@ -38,7 +59,11 @@ def calc_KdSi(T, P):
     PGPa = P/1e9
     # P^2 & P^3 terms are necessary to describe the partition of Si
     # Kd = np.exp(2.98 - 15934/T + (-155 * P + 2.26 * P**2 - 0.011 * P**3) / T)
-    logKd = (2.98 - 15934 / T + (-155 * PGPa + 2.26 * PGPa ** 2 - 0.011 * PGPa ** 3) / T)
+
+    if (Rubie):
+        logKd = (2.98 - 15934 / T + (-155 * PGPa + 2.26 * PGPa ** 2 - 0.011 * PGPa ** 3) / T)
+    else:
+        logKd = (1.3 - 13500 / T)
 
     return np.power(10., logKd)
 
@@ -70,7 +95,7 @@ def partition_MO_impactor(molep, T_eq, P_eq):
     l_Kd[nNb] = calc_Kd("Nb", T_eq, P_eq)
     
     # determine the range
-    tot_Si, tot_Fe = molep[nSi], molep[nFe]
+    tot_Fe = molep[nFe]
 
     # set the range for bisection search
     # x0, x1 represents the mole of Fe in the metal phase
@@ -80,10 +105,13 @@ def partition_MO_impactor(molep, T_eq, P_eq):
     mole_sil, mole_met = massbalance_metFe(x0, molep, l_Kd)
     
     xL = tot_Fe - (molep[nO] -molep[nMg] -molep[nAl]*1.5 -molep[nSi]*2 -molep[nCr] -molep[nCo] -molep[nNi]) # -molep[nV]*1.5 -molep[nNb]*2.5 - molep[nTa]*2.5)
+    #print("tot Fe", tot_Fe)
+    #print("max O ", (molep[nO] -molep[nMg] -molep[nAl]*1.5 -molep[nSi]*2 -molep[nCr] -molep[nCo] -molep[nNi]))
+    
     x1 = positive_Si(xL, molep, l_Kd, f0) 
     f1 = df(x1, molep, l_Kd)
 
-    print("f0, f1: ", f0, f1, "\t", x0, x1)
+    # print("f0, f1: ", f"{f0:.3}", f"{f1:.3}", "\t nFe = ", f"{x0:.4}", f"{x1:.4}")
     flag = 0
     if (f0 * f1 > 0):
         flag = 1
@@ -114,15 +142,26 @@ def partition_MO_impactor(molep, T_eq, P_eq):
         if (i not in list_major):
             mole_sil[i] = molep[i]
 
-    # print("r ", x1/xL, x1, xL)
-
+    # ensure all moles are positive
+    neg = check_negative(mole_sil, mole_met)
+    if (neg == 0):
+        sys.exit()
+    
     return mole_sil, mole_met
 
+@njit
+def check_negative(m1, m2):
+    check = 1
+    for i in range(len(m1)):
+        if (m1[i] < 0 or m2[i] < 0):
+            print(i, " has ", m1[i], m2[i], " mol. ")
+            check = 0
 
-# @njit
+    return check
+
 def df(met_Fe, molep, l_Kd):
     '''
-    Returns the difference between the actual Kd(Si-Fe) and calculated value for Kd(Si-Fe). 
+    Returns the difference between the actual Kd(Cr-Fe) and calculated value for Kd(Cr-Fe). 
 
     input --
     met_Fe: assumed amount of Fe in the metal phase
@@ -147,7 +186,6 @@ def df(met_Fe, molep, l_Kd):
     Kd_Si = l_Kd[nSi]
 
     return xSi_met * (xFe_sil * xFe_sil) / (xFe_met * xFe_met * xSi_sil) - Kd_Si
-
 
 def massbalance_metFe(met_Fe, molep, l_Kd):
     '''
@@ -202,6 +240,7 @@ def massbalance_metFe(met_Fe, molep, l_Kd):
     mole_sil[nO],mole_sil[nMg],mole_sil[nAl] = molep[nO],molep[nMg],molep[nAl]
 
     # assume other minor elements exist as oxides
+    global list_minor
     for i in list_minor:
         mole_sil[i] = molep[i]
     
@@ -215,28 +254,28 @@ def positive_Si(met_Fe, molep, l_Kd, f0):
     new_met_Fe = met_Fe
     count = 0
     while (f0*f1>0): # or mole_met[nSi]<0):
+        print("*")
         count += 1
         new_met_Fe *= 0.9999
         mole_sil, mole_met = massbalance_metFe(new_met_Fe, molep, l_Kd)
         f1 = df(new_met_Fe, molep, l_Kd)
-        print(mole_met[nSi], new_met_Fe, "\t",  f0, f1)
+        print(mole_met[nSi], new_met_Fe, "\t +",  f0, f1)
 
-        if (new_met_Fe/molep[nFe] < 0.1): # or count > 200):
+        if (new_met_Fe/molep[nFe] < 0 or mole_met[nSi] < 0): # or count > 200):
             print()
             print("func_partition.py - positive_Si: met_Fe too small", new_met_Fe, "/", molep[nFe], "\t", f0, f1)
             print(met_Fe)
             print(mole_sil)
             print(mole_met)
             print(molep)
+            print("c = ", count)
             exit()
 
         #print(new_met_Fe, "/", molep[nFe], "\t", f0, f1, "\t", mole_met[nSi])
         
-    print("Si metal", mole_met[nSi])
     return new_met_Fe
-    
 
-# @njit
+
 def partition_minor(n_sil, n_met, T_eq, P_eq):
     '''
     Calculate partitioing of minor elements between silicate and metal phases
@@ -312,7 +351,7 @@ def bisection_search_minor(tot_El, met_Fe, sil_Fe, tot_met, tot_sil, Kd_El, df_E
 
     return xA
 
-
+@njit
 def el_met_max(x0, tot_El, met_Fe, sil_Fe, tot_met, tot_sil, Kd_El, df_El):
     # find the larger end of the bisection search range
     f0 = df_El(x0, tot_El, met_Fe, sil_Fe, tot_met, tot_sil, Kd_El)
@@ -329,6 +368,7 @@ def el_met_max(x0, tot_El, met_Fe, sil_Fe, tot_met, tot_sil, Kd_El, df_El):
     return x1
 
 
+@njit
 def df_V (met_V, tot_V, met_Fe, sil_Fe, tot_met, tot_sil, Kd_V):
     '''
     Compare the difference between  Kd(V-Fe) and the calculated value for K_d(V-Fe).  
@@ -350,8 +390,9 @@ def df_V (met_V, tot_V, met_Fe, sil_Fe, tot_met, tot_sil, Kd_V):
     xFe_met = met_Fe / (tot_met + met_V)
     xFe_sil = sil_Fe / (tot_sil + sil_V)
 
-    return xV_met * xFe_sil ** 1.5 / (xV_sil * xFe_met ** 1.5) - Kd_V
+    return xV_met * xFe_sil ** 1.5 / (xV_sil * xFe_met ** 1.5 + eps) - Kd_V
 
+@njit
 def df_Co(met_Co, tot_Co, met_Fe, sil_Fe, tot_met, tot_sil, Kd_Co):
     '''
     stoichiomery:
@@ -366,8 +407,9 @@ def df_Co(met_Co, tot_Co, met_Fe, sil_Fe, tot_met, tot_sil, Kd_Co):
     xFe_met = met_Fe / (tot_met + met_Co)
     xFe_sil = sil_Fe / (tot_sil + sil_Co)
 
-    return xCo_met * xFe_sil / (xCo_sil * xFe_met) - Kd_Co
+    return xCo_met * xFe_sil / (xCo_sil * xFe_met + eps) - Kd_Co
 
+@njit
 def df_Ta(met_Ta, tot_Ta, met_Fe, sil_Fe, tot_met, tot_sil, Kd_Ta):
     '''
     stoichiomery:
@@ -383,8 +425,9 @@ def df_Ta(met_Ta, tot_Ta, met_Fe, sil_Fe, tot_met, tot_sil, Kd_Ta):
     xFe_met = met_Fe / (tot_met + met_Ta)
     xFe_sil = sil_Fe / (tot_sil + sil_Ta)
 
-    return xTa_met * xFe_sil ** 2 / (xTa_sil * xFe_met ** 2) - Kd_Ta
+    return xTa_met * xFe_sil ** 2 / (xTa_sil * xFe_met ** 2 + eps) - Kd_Ta
 
+@njit
 def df_Nb(met_Nb, tot_Nb, met_Fe, sil_Fe, tot_met, tot_sil, Kd_Nb):
     '''
     stoichiomery:
@@ -400,7 +443,7 @@ def df_Nb(met_Nb, tot_Nb, met_Fe, sil_Fe, tot_met, tot_sil, Kd_Nb):
     xFe_met = met_Fe / (tot_met + met_Nb)
     xFe_sil = sil_Fe / (tot_sil + sil_Nb)
 
-    return xNb_met * xFe_sil / (xNb_sil * xFe_met) - Kd_Nb
+    return xNb_met * xFe_sil / (xNb_sil * xFe_met + eps) - Kd_Nb
 
 def df_FeO(met_Fe, tot_FeO, tot_FeO_onehalf,  tot_sil, Kd_onehalf):
     xFe = 1

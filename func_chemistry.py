@@ -30,7 +30,7 @@ def set_initial_mantle_composition_from_element(x_element):
                              m_element[4]     + m_element[5]     + m_element[6]   + m_element[7] +
                              m_element[8]*2.5 + m_element[9]*2.5,    # O (assuming Fe+2, Cr+2)
     '''
-    m_element_wO = np.array([m_element[0]     + m_element[1]*0.  + m_element[2]*2 + m_element[3]*0. +
+    m_element_wO = np.array([m_element[0]     + m_element[1]*1.5 + m_element[2]*2 + m_element[3]*0. +
                              m_element[4]     + m_element[5]     + m_element[6]   + m_element[7] +
                              m_element[8]*0.  + m_element[9]*0.,    # O (assuming Fe+2, Cr+2)    
                              m_element[0],    # Mg
@@ -144,3 +144,15 @@ def mole2mass(vmole):
         tot += vmole[i]*molar_mass[i]
 
     return tot
+
+
+def wt_percent(n_comp, nel, Mmass):
+    return n_comp[nel] * molar_mass[nel] / Mmass
+
+def calc_D(n_mantle, n_core):
+    M_mantle, M_core = mole2mass(n_mantle), mole2mass(n_core)
+
+    c_mantle = n_mantle * molar_mass / M_mantle
+    c_core   = n_core   * molar_mass / M_core
+
+    return c_core/c_mantle
